@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HW903 本地数据标注器</title><link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div><h1>HW903 数据标注器</h1><p>仅上传至本机，不发送到云端</p></div>
+    <nav aria-label="数据操作">
+      <button id="upload" class="primary">上传数据</button>
+      <button id="tasks-button">任务列表</button>
+      <button id="download" disabled>下载结果</button>
+    </nav>
+  </header>
+  <div id="message" role="status" aria-live="polite">正在连接本机数据服务…</div>
+  <section id="empty" class="empty" hidden>
+    <h2>上传一份或一批 HW903 数据</h2>
+    <p>选择 CSV，或上传此前下载的任务 ZIP 包。每批独立保存，关闭网页后仍可继续。</p>
+    <button id="empty-upload" class="primary">上传数据</button>
+    <p class="muted">原始文件不会被修改。首版支持 HW903；不将一批文件自动拼接。</p>
+  </section>
+  <main id="workspace" hidden>
+    <section class="task-bar">
+      <div><h2 id="task-name"></h2><p id="task-status" class="muted"></p></div>
+      <button id="add-files">追加数据</button>
+    </section>
+    <div class="layout">
+      <aside class="records-rail" aria-label="记录入口">
+        <div id="records-launcher">
+          <button id="records-toggle" type="button" aria-expanded="false" aria-controls="records-panel" aria-label="打开本任务记录" title="悬停查看或点击展开记录">
+            <span class="records-toggle-label">记录</span><span id="records-count">0</span><span aria-hidden="true">›</span>
+          </button>
+        </div>
+      </aside>
+      <aside class="records-panel" id="records-panel" aria-labelledby="records-title" aria-hidden="true" tabindex="-1" inert>
+        <div class="records-heading"><h3 id="records-title">本任务记录</h3><div class="records-actions"><button id="records-pin" type="button" aria-pressed="false">固定展开</button><button id="records-close" type="button" aria-label="收起本任务记录">收起</button></div></div>
+        <p id="records-help" class="muted">移出后自动收起，也可固定展开。</p>
+        <div id="records"></div>
+      </aside>
+      <section class="working-surface">
+        <div class="record-heading"><h2 id="record-name" tabindex="-1"></h2><span id="save-status" role="status"></span></div>
+        <div id="record-info" class="metadata"></div>
+        <div id="missing-original" class="notice" hidden><p>此结果包没有原始数据。补传同一文件并通过内容指纹检查后，即可继续。</p><button id="attach">补传原始数据</button></div>
+        <details id="checks"><summary id="checks-title">数据检查</summary><div id="check-content"></div></details>
+        <div id="editor" hidden>
+          <div class="mode-bar"><div role="group" aria-label="工作模式"><button id="blind-mode" aria-pressed="true">盲标</button><button id="compare-mode" aria-pressed="false">算法对照</button></div><button id="algorithm-import">导入算法结果</button></div>
+          <section id="comparison" hidden><h3>人工标签与算法输出</h3><p id="algorithm-info" class="muted"></p><canvas id="overview" height="150" aria-label="整段人工标注和算法输出的时间轴"></canvas><div id="differences"></div></section>
+          <div class="annotation-workspace">
+          <section class="annotation-editor" id="annotation-dock" aria-label="选区与确认保存">
+            <h3 id="edit-title">添加区间</h3>
+            <p id="selection-info" class="selection-summary">在任一波形上按住左键拖选区间。</p>
+            <p id="selection-warning" class="selection-warning" hidden></p>
+            <form id="annotation-form">
+              <label>活动状态<select id="label-type"><option value="EXERCISE">运动</option><option value="NON">非运动</option><option value="TRANSITION">过渡</option><option value="UNKNOWN">不确定</option></select></label>
+              <button type="submit" class="primary" id="save-label" disabled>确认区间并保存</button>
+              <button type="button" id="cancel-edit">取消选区 · Esc</button>
+              <details id="selection-precision">
+                <summary>精调时间与备注</summary>
+                <label>开始（含，相对毫秒）<input id="label-start" type="number" step="1" required></label>
+                <label>结束（不含，相对毫秒）<input id="label-end" type="number" step="1" required></label>
+                <label>备注<input id="label-note" maxlength="2000" placeholder="可选"></label>
+              </details>
+            </form>
+            <p class="muted dock-help">拖左右把手调整边界，拖选区内部整体移动。松开鼠标不自动保存。</p>
+          </section>
+          <div class="waveform-panel">
+          <div class="view-tools">
+            <label>视窗开始（秒）<input id="view-start" type="number" step="0.001" min="0"></label>
+            <label>视窗结束（秒）<input id="view-end" type="number" step="0.001" min="0"></label>
+            <button id="apply-view">定位</button><button id="previous-window" aria-label="前一个时间窗口">←</button><button id="next-window" aria-label="后一个时间窗口">→</button><button id="zoom-selection" disabled>放大选区</button><button id="full-view">全段</button>
+          </div>
+          <p id="time-info" class="muted"></p>
+          <p class="gesture-help">左键拖选 · 空格＋拖动平移 · 单击定位 · 点击波形顶部标签条可编辑</p>
+          <div id="signals" class="signals"></div>
+          <div class="ppg-tools"><label for="ppg-slot">PPG 槽位</label><select id="ppg-slot"><option value="0">绿光组 1 · slot0</option><option value="1">绿光组 2 · slot1</option><option value="2" selected>中心绿光 · slot2</option><option value="3">红光 · slot3</option><option value="4">红外 · slot4</option></select><span class="muted">ADC0–3 同时显示；全零不等于缺失</span></div>
+          <div id="ppg-signals" class="signals"></div>
+          <p class="muted">普通滚轮仍滚动页面。绘图可能抽稀，选区始终按原始时间定位；毫秒显示不等于鼠标具有毫秒精度。</p>
+          </div>
+          </div>
+          <section><div class="record-heading"><h3>已保存的人工标注</h3><label class="checkbox"><input id="completed" type="checkbox">此记录已完成</label></div><p class="muted">未标注区间不等于“非运动”。过渡、不确定和未标注区间不纳入二分类差异。</p><div id="labels"></div></section>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer><span id="storage-path"></span><span>任务仅在主动清理时移入本地回收区；下载不自动删除。</span></footer>
+  <input type="file" id="upload-input" accept=".csv,.zip" multiple hidden>
+  <input type="file" id="attach-input" accept=".csv" hidden>
+  <input type="file" id="algorithm-input" accept=".json,application/json" hidden>
+  <dialog id="tasks-dialog"><div class="dialog-heading"><h2>本地任务</h2><button data-close="tasks-dialog">关闭</button></div><div id="tasks-list"></div><p class="muted">移入回收区后仍占用磁盘，原始文件不会被永久删除。回收路径会显示在提示中。</p></dialog>
+  <dialog id="download-dialog"><div class="dialog-heading"><h2>下载结果</h2><button data-close="download-dialog">关闭</button></div><p>包含人工标注 CSV、无损恢复清单、检查信息以及已导入的算法结果。</p><label class="checkbox"><input type="checkbox" id="include-original">包含原始数据，生成完整任务包</label><p class="muted">不包含原始数据时，恢复后需补传同指纹原文件。结果是当前版本的快照，下载不代表已获得备份。</p><button id="confirm-download" class="primary">生成并下载 ZIP</button></dialog>
+  <dialog id="algorithm-dialog"><div class="dialog-heading"><h2>导入算法结果</h2><button data-close="algorithm-dialog">关闭</button></div><p>上传与本记录对应的 JSON 区间结果，不会运行算法或覆盖人工标签。</p><p>模板包含当前源文件指纹和时间起点。填写版本及区间；起止均为相对起点的整数毫秒，区间含开始不含结束。未输出的区间不自动视为非运动。</p><button id="algorithm-template">下载本记录模板</button><button id="choose-algorithm" class="primary">选择结果 JSON</button></dialog>
+  <dialog id="confirm-dialog"><h2 id="confirm-title"></h2><p id="confirm-text"></p><label id="confirm-label">输入任务名称<input id="confirm-input"></label><div class="dialog-actions"><button id="confirm-cancel">取消</button><button id="confirm-ok" class="danger">确认</button></div></dialog>
+</body>
+</html>
